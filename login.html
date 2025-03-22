@@ -46,7 +46,7 @@
       font-size: 14px;
       line-height: 1.4;
     }
-    /* Auth Card */
+    /* Authentication Card */
     .card {
       flex: 1;
       padding: 30px;
@@ -169,18 +169,16 @@
   </div>
   
   <script>
-    // Check if user is already logged in via cookie
-    document.addEventListener("DOMContentLoaded", () => {
-      if (getCookie("loggedInUser")) {
-        window.location.href = "user-dashboard.html"; // Redirect if logged in
-      }
+    // Clear any authentication on page load so that refresh/reopen signs out the user.
+    window.addEventListener("load", () => {
+      // Remove any existing session cookie by setting it to expire immediately.
+      document.cookie = "loggedInUser=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     });
-
+    
     // Helper functions to manage cookies
-    function setCookie(name, value, days) {
-      const date = new Date();
-      date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
-      document.cookie = name + "=" + value + "; expires=" + date.toUTCString() + "; path=/";
+    function setCookie(name, value) {
+      // Set a session cookie (no expiry date) so it ends when the browser is closed.
+      document.cookie = name + "=" + value + "; path=/";
     }
 
     function getCookie(name) {
@@ -227,7 +225,7 @@
         // Sign In Logic: Check if user exists and password matches
         if (storedUsers[email] && storedUsers[email].password === password) {
           alert("Login successful!");
-          setCookie("loggedInUser", email, 7); // Set session for 7 days
+          setCookie("loggedInUser", email); // Set session cookie (no persistence across refreshes)
           window.location.href = "user-dashboard.html";
         } else {
           alert("Invalid credentials");
@@ -237,16 +235,19 @@
         if (storedUsers[email]) {
           alert("User already exists!");
         } else {
-          // Optional: store full name if needed
           const fullName = document.getElementById("name").value.trim();
           storedUsers[email] = { password, fullName };
           localStorage.setItem("users", JSON.stringify(storedUsers));
           alert("Account created successfully!");
-          // Optionally, sign the user in immediately after sign up:
-          setCookie("loggedInUser", email, 7);
+          setCookie("loggedInUser", email);
           window.location.href = "user-dashboard.html";
         }
       }
+    });
+    
+    // Optionally, clear the cookie on page unload to further ensure sign-out on refresh.
+    window.addEventListener("beforeunload", () => {
+      document.cookie = "loggedInUser=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
     });
   </script>
 </body>
