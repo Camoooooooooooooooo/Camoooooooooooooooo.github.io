@@ -1,0 +1,199 @@
+<!-- Golden Valley Wash Solo Operator Dashboard - Cloud Connected Version -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Golden Valley Wash Dashboard</title>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.1/firebase-database-compat.js"></script>
+
+  <!-- Axios -->
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background: #f8f9fa; margin: 0; }
+    header { background: #0077cc; color: #fff; padding: 1.5rem; text-align: center; }
+    nav { background: #fff; display: flex; flex-wrap: wrap; justify-content: center; gap: 1rem; padding: 1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 1rem 1rem; }
+    nav a { background: #0077cc; color: #fff; padding: 0.7rem 1.2rem; border-radius: 8px; text-decoration: none; transition: background 0.3s; }
+    nav a:hover { background: #005fa3; }
+
+    section { padding: 2rem; display: none; }
+    section.active { display: block; }
+
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); margin: 1rem 0; padding: 1.5rem; }
+    h2 { margin-top: 0; }
+
+    input, textarea, button { width: 100%; margin: 0.5rem 0; padding: 0.8rem; border-radius: 8px; border: 1px solid #ccc; }
+    button { background: #28a745; color: #fff; border: none; cursor: pointer; transition: background 0.3s; }
+    button:hover { background: #218838; }
+
+    ul { list-style: none; padding: 0; }
+    li { background: #f1f1f1; padding: 0.8rem; margin-top: 0.5rem; border-radius: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .btn-group button { margin-left: 0.5rem; width: auto; padding: 0.4rem 0.8rem; }
+    .edit-btn { background: #ffc107; color: #333; }
+    .delete-btn { background: #dc3545; }
+    .complete-btn { background: #17a2b8; }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>Golden Valley Wash</h1>
+</header>
+
+<nav id="nav"></nav>
+
+<main id="pages"></main>
+
+<script>
+// --- CONFIG ---
+const firebaseConfig = {
+  apiKey: "AIzaSyBLNlpfMP6zCKTj_P-iQz9yJcb4Wa657yA",
+  authDomain: "gvwash-f8d76.firebaseapp.com",
+  databaseURL: "https://gvwash-f8d76-default-rtdb.firebaseio.com",
+  projectId: "gvwash-f8d76",
+  storageBucket: "gvwash-f8d76.firebasestorage.app",
+  messagingSenderId: "488749031841",
+  appId: "1:488749031841:web:167977907f9ea415ebabe0",
+  measurementId: "G-VLL86Z0TCT"
+};
+const weatherApiKey = 'a1d118b477ea46f8be101112252804';
+const sections = ['overview', 'schedule', 'clients', 'invoices', 'notes', 'expenses', 'settings'];
+const singularMap = { jobs: 'job', clients: 'client', invoices: 'invoice', notes: 'note', expenses: 'expense' };
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// --- UI GENERATION ---
+const nav = document.getElementById('nav');
+const pages = document.getElementById('pages');
+
+sections.forEach(section => {
+  nav.innerHTML += `<a href="#" onclick="showPage('${section}')">${capitalize(section)}</a>`;
+  pages.innerHTML += `<section id="${section}" class="${section === 'overview' ? 'active' : ''}">${generateSectionContent(section)}</section>`;
+});
+
+function generateSectionContent(section) {
+  switch (section) {
+    case 'overview':
+      return `<div class="card">
+                <h2>Today's Overview</h2>
+                <p>Revenue: $<span id="revenue">0</span></p>
+                <p>Jobs Completed: <span id="jobsCompleted">0</span></p>
+                <p>Next Job: <span id="nextJob">None</span></p>
+                <p>Weather: <span id="weather">Loading...</span></p>
+              </div>`;
+    case 'settings':
+      return `<div class="card">
+                <h2>Settings</h2>
+                ${['Business Name', 'Owner Name', 'Phone Number', 'Email Address', 'Service Area', 'Default Job Price']
+                  .map(field => `<input placeholder="${field}" onchange="saveSetting('${camelCase(field)}', this.value)">`).join('')}
+              </div>`;
+    default:
+      return `<div class="card">
+                <h2>${capitalize(section)}</h2>
+                <input id="new${capitalize(singularMap[section+'s'] || section)}" placeholder="New ${capitalize(singularMap[section+'s'] || section)}">
+                <button onclick="addItem('${section}')">Add ${capitalize(singularMap[section+'s'] || section)}</button>
+                <ul id="${section}List"></ul>
+                ${section === 'schedule' || section === 'invoices' ? `<h3>Completed ${capitalize(section)}</h3><ul id="completed${capitalize(section)}List"></ul>` : ''}
+              </div>`;
+  }
+}
+
+// --- PAGE HANDLING ---
+function showPage(id) {
+  document.querySelectorAll('section').forEach(sec => sec.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function capitalize(str) {
+  return str.charAt(0).toUpperCase() + str.slice(1);
+}
+
+function camelCase(str) {
+  return str.replace(/\s+(.)/g, (_, c) => c.toUpperCase()).replace(/^./, str[0].toLowerCase());
+}
+
+// --- FIREBASE DATA HANDLING ---
+function createListItem(id, text, listId, completed = false) {
+  const li = document.createElement('li');
+  li.id = id;
+  li.innerHTML = `${text}<div class='btn-group'>
+                    ${!completed ? `<button class='complete-btn' onclick='completeItem("${id}", "${listId}")'>Complete</button>` : ''}
+                    <button class='edit-btn' onclick='editItem("${id}", "${listId}")'>Edit</button>
+                    <button class='delete-btn' onclick='deleteItem("${id}", "${listId}")'>Delete</button>
+                  </div>`;
+  document.getElementById(listId).appendChild(li);
+}
+
+function addItem(type) {
+  const inputId = `new${capitalize(singularMap[type+'s'] || type)}`;
+  const value = document.getElementById(inputId).value;
+  if (value) {
+    const ref = db.ref(type).push();
+    ref.set({ text: value });
+    document.getElementById(inputId).value = '';
+  }
+}
+
+function deleteItem(id, listId) {
+  db.ref(listId.replace('List','') + '/' + id).remove();
+}
+
+function editItem(id, listId) {
+  const newText = prompt('Edit item:');
+  if (newText) db.ref(listId.replace('List','') + '/' + id).update({ text: newText });
+}
+
+function completeItem(id, listId) {
+  const type = listId.replace('List', '');
+  db.ref(type + '/' + id).once('value', snapshot => {
+    if (snapshot.exists()) {
+      db.ref('completed_' + type + '/' + id).set(snapshot.val());
+      db.ref(type + '/' + id).remove();
+    }
+  });
+}
+
+function saveSetting(key, value) {
+  db.ref('settings/' + key).set(value);
+}
+
+function loadData() {
+  ['jobs', 'clients', 'invoices', 'notes', 'expenses', 'completed_jobs', 'completed_invoices'].forEach(type => {
+    db.ref(type).on('value', snapshot => {
+      const listName = type.startsWith('completed_') ? 'completed' + capitalize(type.replace('completed_', '')) + 'List' : type+'List';
+      const ul = document.getElementById(listName);
+      if (ul) {
+        ul.innerHTML = '';
+        snapshot.forEach(child => {
+          createListItem(child.key, child.val().text, listName, type.startsWith('completed_'));
+        });
+      }
+    });
+  });
+}
+
+function loadWeather() {
+  axios.get(`https://api.weatherapi.com/v1/current.json?key=${weatherApiKey}&q=auto:ip`)
+    .then(response => {
+      const weather = `${response.data.current.condition.text}, ${response.data.current.temp_f}°F`;
+      document.getElementById('weather').innerText = weather;
+    }).catch(() => {
+      document.getElementById('weather').innerText = 'Unavailable';
+    });
+}
+
+// --- INIT ---
+loadData();
+loadWeather();
+</script>
+
+</body>
+
+</html>
