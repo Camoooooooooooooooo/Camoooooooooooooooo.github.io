@@ -16,7 +16,6 @@
       height: 100vh;
       color: #333;
     }
-
     .app-container {
       background: #fff;
       border-radius: 16px;
@@ -27,28 +26,14 @@
       text-align: center;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
     }
-
     header h1 {
       font-size: 1.5rem;
       margin: 0;
       color: #27ae60;
     }
-
-    .subtitle {
-      font-size: 0.9rem;
-      color: #666;
-    }
-
-    #reader {
-      width: 100%;
-      height: 300px;
-      margin: 20px auto;
-      background: #000;
-      position: relative;
-    }
-
+    .subtitle { font-size: 0.9rem; color: #666; }
+    #video-container { width: 100%; height: 300px; background: #000; margin: 20px auto; }
     .status {
       background: #f9f9f9;
       border-radius: 8px;
@@ -57,17 +42,8 @@
       color: #555;
       transition: all 0.3s ease;
     }
-
-    .status.success {
-      background-color: #d4edda;
-      color: #155724;
-    }
-
-    .status.error {
-      background-color: #f8d7da;
-      color: #721c24;
-    }
-
+    .status.success { background-color: #d4edda; color: #155724; }
+    .status.error { background-color: #f8d7da; color: #721c24; }
     button {
       padding: 10px 20px;
       background-color: #27ae60;
@@ -78,16 +54,8 @@
       cursor: pointer;
       margin-top: 10px;
     }
-
-    button:hover {
-      background-color: #2ecc71;
-    }
-
-    footer {
-      margin-top: 10px;
-      font-size: 0.75rem;
-      color: #999;
-    }
+    button:hover { background-color: #2ecc71; }
+    footer { margin-top: 10px; font-size: 0.75rem; color: #999; }
   </style>
 </head>
 <body>
@@ -98,7 +66,9 @@
     </header>
 
     <main>
-      <div id="reader"></div>
+      <div id="video-container">
+        <video id="video" width="100%" height="100%" autoplay muted playsinline></video>
+      </div>
       <div id="status" class="status">Click "Start Scanner" to begin</div>
       <button id="start-button">Start Scanner</button>
     </main>
@@ -108,8 +78,12 @@
     </footer>
 
     <audio id="beep-sound" src="https://actions.google.com/sounds/v1/alarms/beep_short.ogg"></audio>
-    <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
-    <script>
+
+    <!-- ZXing Barcode library -->
+    <script type="module">
+      import { BrowserMultiFormatReader } from 'https://cdn.jsdelivr.net/npm/@zxing/browser@0.0.11/esm/index.min.js';
+
+      const video = document.getElementById("video");
       const startButton = document.getElementById("start-button");
       const resultEl = document.getElementById("status");
       const beep = document.getElementById("beep-sound");
@@ -124,13 +98,12 @@
         }, 2500);
       }
 
-      // Simple CRV lookup (default 10¢)
       function getCrvValue(barcode) {
-        return 0.10; // expand later for other container types
+        return 0.10; // default, expand for other container types
       }
 
       function sendToWebhook(data) {
-        fetch("https://webhook.site/your-test-url", { // replace with your Make.com webhook
+        fetch("https://webhook.site/your-test-url", { // replace with your webhook
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data)
@@ -139,25 +112,27 @@
         .catch(err => flashMessage(`❌ Error sending: ${err}`, "error"));
       }
 
-      function onScanSuccess(decodedText) {
-        const crvValue = getCrvValue(decodedText);
-        sendToWebhook({ barcode: decodedText, crvValue, scannedAt: new Date().toISOString() });
-      }
-
-      startButton.addEventListener("click", () => {
+      startButton.addEventListener("click", async () => {
         startButton.disabled = true;
         startButton.innerText = "Scanner Running...";
 
         try {
-          const html5QrCode = new Html5Qrcode("reader");
-          html5QrCode.start(
-            { facingMode: "environment" },
-            { fps: 10, qrbox: 250 },
-            onScanSuccess,
-            err => console.warn("Scan error:", err)
-          ).catch(err => flashMessage(`⚠️ Camera error: ${err}`, "error"));
-        } catch(e) {
-          flashMessage("❌ Could not start camera. Make sure you allow camera permissions.", "error");
+          const codeReader = new BrowserMultiFormatReader();
+          const constraints = { video: { facingMode: "environment" } };
+
+          const stream = await navigator.mediaDevices.getUserMedia(constraints);
+          video.srcObject = stream;
+
+          codeReader.decodeFromVideoDevice(null, video, (result, err) => {
+            if (result) {
+              const crvValue = getCrvValue(result.text);
+              sendToWebhook({ barcode: result.text, crvValue, scannedAt: new Date().toISOString() });
+            }
+          });
+        } catch (e) {
+          flashMessage("❌ Could not access camera. Make sure you allow permissions.", "error");
+          startButton.disabled = false;
+          startButton.innerText = "Start Scanner";
         }
       });
     </script>
