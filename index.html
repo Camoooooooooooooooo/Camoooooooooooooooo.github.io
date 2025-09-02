@@ -43,6 +43,7 @@
 
     #reader {
       width: 100%;
+      height: 300px; /* Explicit height so camera displays properly */
       margin: 20px auto;
     }
 
@@ -94,47 +95,51 @@
     <!-- Scanner library -->
     <script src="https://unpkg.com/html5-qrcode/minified/html5-qrcode.min.js"></script>
     <script>
-      const resultEl = document.getElementById("status");
-      const beep = document.getElementById("beep-sound");
+      document.addEventListener("DOMContentLoaded", function() {
+        const resultEl = document.getElementById("status");
+        const beep = document.getElementById("beep-sound");
 
-      function flashMessage(message, type="success") {
-        resultEl.innerText = message;
-        resultEl.className = `status ${type}`;
-        beep.play();
+        function flashMessage(message, type="success") {
+          resultEl.innerText = message;
+          resultEl.className = `status ${type}`;
+          beep.play();
 
-        // Clear message after 2.5 seconds
-        setTimeout(() => {
-          resultEl.innerText = "Waiting for scan...";
-          resultEl.className = "status";
-        }, 2500);
-      }
+          // Reset after 2.5 seconds
+          setTimeout(() => {
+            resultEl.innerText = "Waiting for scan...";
+            resultEl.className = "status";
+          }, 2500);
+        }
 
-      function sendToWebhook(barcode) {
-        fetch("https://hook.us2.make.com/maa3oikd1bi91uylz8ujvwo0fpgnjhes", { // replace with your Make.com or Webhook.site URL
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            barcode: barcode,
-            scannedAt: new Date().toISOString()
+        // CRV lookup (simple example, default 10¢)
+        function getCrvValue(barcode) {
+          // TODO: Expand to check actual barcode types
+          return 0.10;
+        }
+
+        function sendToWebhook(data) {
+          fetch("https://hook.us2.make.com/maa3oikd1bi91uylz8ujvwo0fpgnjhes", { // replace with your Make.com webhook
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
           })
-        })
-        .then(() => flashMessage(`✅ Sent: ${barcode}`, "success"))
-        .catch(err => flashMessage(`❌ Error sending: ${err}`, "error"));
-      }
+          .then(() => flashMessage(`✅ Scanned: ${data.barcode} ($${data.crvValue.toFixed(2)})`, "success"))
+          .catch(err => flashMessage(`❌ Error sending: ${err}`, "error"));
+        }
 
-      function onScanSuccess(decodedText) {
-        flashMessage(`📦 Scanned: ${decodedText}`, "success");
-        sendToWebhook(decodedText);
-      }
+        function onScanSuccess(decodedText) {
+          const crvValue = getCrvValue(decodedText);
+          sendToWebhook({ barcode: decodedText, crvValue: crvValue, scannedAt: new Date().toISOString() });
+        }
 
-      const html5QrCode = new Html5Qrcode("reader");
-
-      html5QrCode.start(
-        { facingMode: "environment" },
-        { fps: 10, qrbox: 250 },
-        onScanSuccess,
-        err => console.warn("Scan error:", err)
-      ).catch(err => flashMessage(`⚠️ Camera error: ${err}`, "error"));
+        const html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: 250 },
+          onScanSuccess,
+          err => console.warn("Scan error:", err)
+        ).catch(err => flashMessage(`⚠️ Camera error: ${err}`, "error"));
+      });
     </script>
   </div>
 </body>
