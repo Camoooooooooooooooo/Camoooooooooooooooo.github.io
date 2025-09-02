@@ -46,6 +46,7 @@
       height: 300px;
       margin: 20px auto;
       background: #000;
+      position: relative;
     }
 
     .status {
@@ -147,14 +148,17 @@
         startButton.disabled = true;
         startButton.innerText = "Scanner Running...";
 
-        const html5QrCode = new Html5Qrcode("reader");
-
-        html5QrCode.start(
-          { facingMode: "environment" },
-          { fps: 10, qrbox: 250 },
-          onScanSuccess,
-          err => console.warn("Scan error:", err)
-        ).catch(err => flashMessage(`⚠️ Camera error: ${err}`, "error"));
+        try {
+          const html5QrCode = new Html5Qrcode("reader");
+          html5QrCode.start(
+            { facingMode: "environment" },
+            { fps: 10, qrbox: 250 },
+            onScanSuccess,
+            err => console.warn("Scan error:", err)
+          ).catch(err => flashMessage(`⚠️ Camera error: ${err}`, "error"));
+        } catch(e) {
+          flashMessage("❌ Could not start camera. Make sure you allow camera permissions.", "error");
+        }
       });
     </script>
   </div>
