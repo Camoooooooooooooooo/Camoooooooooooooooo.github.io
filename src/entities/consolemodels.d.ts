@@ -1,1 +1,0 @@
-consolemodels.d.ts
